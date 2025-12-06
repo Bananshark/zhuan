@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AR文物智能介绍系统</title>
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v7.0.0/dist/aframe-extras.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;overflow:hidden}
+#arScene{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1}
+#arScene a-scene{width:100%;height:100%}
+.info-panel{position:fixed;top:0;right:-400px;width:400px;height:100vh;background:#fff;box-shadow:-2px 0 10px rgba(0,0,0,.2);z-index:100;transition:right .3s ease,bottom .3s ease,transform .3s ease;overflow-y:auto;padding:20px}
+.info-panel.show{right:0}
+.info-panel-backdrop{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.3);z-index:99;opacity:0;pointer-events:none;transition:opacity .3s ease;display:none}
+.info-panel.show ~ .info-panel-backdrop,.info-panel-backdrop.show{opacity:1;pointer-events:auto}
+@media (max-width:768px){
+.info-panel-backdrop{display:block}
+}
+.info-panel h2{font-size:20px;color:#333;margin-bottom:15px;padding-bottom:10px;border-bottom:2px solid #667eea}
+.info-panel .info-content{color:#666;line-height:1.8;font-size:14px;margin-bottom:20px}
+.info-panel .close-btn{position:absolute;top:15px;right:15px;width:30px;height:30px;border:0;background:#667eea;color:#fff;border-radius:50%;cursor:pointer;font-size:18px;line-height:30px;text-align:center}
+.info-panel .close-btn:hover{background:#5568d3}
+
+/* 聊天部分样式 */
+.chat-section{margin-top:20px;border-top:1px solid #e0e0e0;padding-top:15px}
+.chat-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;cursor:pointer}
+.chat-header span{font-size:16px;font-weight:500;color:#333}
+.chat-toggle-btn{background:none;border:none;color:#667eea;font-size:18px;cursor:pointer;transition:transform 0.3s ease}
+.chat-toggle-btn.collapsed{transform:rotate(-90deg)}
+.chat-content{overflow:hidden;transition:max-height 0.3s ease}
+.chat-content.collapsed{max-height:0}
+.messages-container{height:200px;overflow-y:auto;padding:10px;background:#f9f9f9;border-radius:8px;margin-bottom:10px;display:flex;flex-direction:column;gap:8px}
+.message{max-width:80%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.5;word-wrap:break-word}
+.user-message{align-self:flex-end;background:#667eea;color:#fff}
+.bot-message{align-self:flex-start;background:#fff;color:#333;border:1px solid #e0e0e0}
+.input-container{display:flex;gap:8px}
+#userInput{flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:20px;font-size:13px;outline:0}
+#userInput:focus{border-color:#667eea}
+#sendButton{padding:8px 16px;border:0;border-radius:20px;background:#667eea;color:#fff;font-size:13px;cursor:pointer}
+#sendButton:hover{background:#5568d3}
+.typing-indicator{display:none;align-self:flex-start;background:#fff;padding:8px 12px;border-radius:12px;border:1px solid #e0e0e0;margin-bottom:8px;font-size:13px}
+.typing-indicator.show{display:block}
+.typing-dots{display:inline-flex;gap:4px;margin-left:8px}
+.typing-dots span{width:6px;height:6px;background:#667eea;border-radius:50%;animation:typing 1.4s infinite}
+.typing-dots span:nth-child(2){animation-delay:.2s}
+.typing-dots span:nth-child(3){animation-delay:.4s}
+@keyframes typing{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
+.import-buttons-container{margin-bottom:15px;display:none;gap:8px}
+.import-buttons-container.show{display:flex}
+.import-button{padding:8px 16px;background:#667eea;color:#fff;border:0;border-radius:20px;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2);white-space:nowrap}
+.import-button:hover{background:#5568d3}
+@media (max-width:768px){
+.info-panel{width:90%;max-width:360px;right:auto;left:50%;transform:translateX(-50%) translateY(100%);height:auto;max-height:70vh;top:auto;bottom:0;border-radius:16px 16px 0 0;padding:15px 15px 20px 15px;box-shadow:0 -2px 20px rgba(0,0,0,.3)}
+.info-panel.show{right:auto;left:50%;transform:translateX(-50%) translateY(0)}
+.info-panel h2{font-size:18px;margin-bottom:12px}
+.info-panel .info-content{font-size:13px;line-height:1.6;max-height:30vh;overflow-y:auto}
+.info-panel .close-btn{top:10px;right:10px;width:28px;height:28px;font-size:16px;line-height:28px}
+.chat-section{margin-top:15px}
+.messages-container{height:150px}
+}
+@media (max-width:480px){
+.info-panel{width:95%;max-width:none;right:auto;left:50%;transform:translateX(-50%) translateY(100%);max-height:75vh;bottom:0;padding:12px 12px 18px 12px;border-radius:16px 16px 0 0}
+.info-panel.show{right:auto;left:50%;transform:translateX(-50%) translateY(0)}
+.info-panel h2{font-size:16px;margin-bottom:10px}
+.info-panel .info-content{font-size:12px;max-height:25vh}
+.info-panel .close-btn{top:8px;right:8px;width:26px;height:26px;font-size:14px;line-height:26px}
+.chat-section{margin-top:12px}
+.messages-container{height:120px}
+}
+.error-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);z-index:1000;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:20px}
+.error-box{background:#fff;border-radius:12px;padding:30px;max-width:500px;width:100%;box-shadow:0 4px 20px rgba(0,0,0,.3);text-align:center}
+.error-box h2{color:#e74c3c;margin-bottom:15px;font-size:22px}
+
+.error-box p{color:#666;line-height:1.8;margin-bottom:20px;font-size:14px}
+.error-box .error-icon{font-size:48px;margin-bottom:15px}
+.error-box .action-btn{padding:12px 24px;background:#667eea;color:#fff;border:0;border-radius:20px;cursor:pointer;font-size:14px;margin:5px}
+.error-box .action-btn:hover{background:#5568d3}
+.error-box .action-btn.secondary{background:#95a5a6}
+.error-box .action-btn.secondary:hover{background:#7f8c8d}
+.error-box ul{text-align:left;color:#666;line-height:2;margin:15px 0;padding-left:20px;font-size:13px}
+.loading-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:999;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff}
+.loading-box{background:rgba(255,255,255,.1);backdrop-filter:blur(10px);border-radius:12px;padding:30px;max-width:400px;width:90%;text-align:center;border:1px solid rgba(255,255,255,.2)}
+.loading-box h3{color:#fff;margin-bottom:20px;font-size:18px}
+.loading-progress{width:100%;height:8px;background:rgba(255,255,255,.2);border-radius:4px;overflow:hidden;margin-bottom:15px}
+.loading-progress-bar{height:100%;background:linear-gradient(90deg,#667eea,#764ba2);width:0%;transition:width .3s ease;border-radius:4px}
+.loading-text{color:rgba(255,255,255,.9);font-size:14px;margin-top:10px}
+.spinner{width:40px;height:40px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="arScene">
+<a-scene id="arSceneContainer" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+<a-assets id="assetsContainer">
+<!-- 模型资源将动态加载 -->
+</a-assets>
+<a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+<!-- AR目标实体将动态生成 -->
+</a-scene>
+</div>
+<div class="info-panel-backdrop" id="infoPanelBackdrop"></div>
+<div class="info-panel" id="infoPanel">
+<button class="close-btn" id="closeInfo">×</button>
+<h2 id="infoTitle">文物介绍</h2>
+<div class="info-content" id="infoContent">正在加载介绍信息...</div>
+<div class="import-buttons-container" id="importButtonsContainer">
+<button class="import-button" id="importButton1">按钮1</button>
+<button class="import-button" id="importButton2">按钮2</button>
+</div>
+<div class="chat-section" id="chatSection">
+<div class="chat-header">
+<span>AI智能问答</span>
+<button class="chat-toggle-btn" id="chatToggleBtn">▼</button>
+</div>
+<div class="chat-content" id="chatContent">
+<div class="messages-container" id="messagesContainer"></div>
+<div class="typing-indicator" id="typingIndicator"><span>AI正在思考</span><div class="typing-dots"><span></span><span></span><span></span></div></div>
+<div class="input-container">
+<input type="text" id="userInput" placeholder="输入您的问题..." autocomplete="off">
+<button id="sendButton">发送</button>
+</div>
+</div>
+</div>
+</div>
+
+<div class="error-overlay" id="errorOverlay" style="display:none">
+<div class="error-box">
+<div class="error-icon">⚠️</div>
+<h2 id="errorTitle">摄像头权限问题</h2>
+<p id="errorMessage"></p>
+<div id="errorActions"></div>
+</div>
+</div>
+<div class="loading-overlay" id="loadingOverlay" style="display:none">
+<div class="loading-box">
+<div class="spinner"></div>
+<h3 id="loadingTitle">正在加载资源...</h3>
+<div class="loading-progress">
+<div class="loading-progress-bar" id="loadingProgressBar"></div>
+</div>
+<div class="loading-text" id="loadingText">0%</div>
+</div>
+</div>
+<script>
+let artifactInfo={};
+let artifactModels={};
+let artifactButtons={};
+let apiConfig={url:"",key:"",appId:""},isWaitingForResponse=false,currentTarget=null;
+let mindFilePath="./mind/postcard&table.mind";
+let maxTrackConfig=2;
+let activeTargets=new Map();
+const scene=document.querySelector('#arSceneContainer');
+const infoPanel=document.getElementById('infoPanel');
+let mindarInitialized=false;
+let loadedModels={};
+let loadingModel=null;
+function isHTTPS(){
+return window.location.protocol==='https:'||window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1'||window.location.hostname==='[::1]';
+}
+function showError(title,message,actions){
+const overlay=document.getElementById('errorOverlay');
+const titleEl=document.getElementById('errorTitle');
+const messageEl=document.getElementById('errorMessage');
+const actionsEl=document.getElementById('errorActions');
+titleEl.textContent=title;
+messageEl.innerHTML=message;
+actionsEl.innerHTML='';
+if(actions&&actions.length>0){
+actions.forEach(action=>{
+const btn=document.createElement('button');
+btn.className='action-btn'+(action.secondary?' secondary':'');
+btn.textContent=action.text;
+btn.onclick=action.callback;
+actionsEl.appendChild(btn);
+});
+}
+overlay.style.display='flex';
+}
+function hideError(){
+document.getElementById('errorOverlay').style.display='none';
+}
+function showLoading(title,text){
+const overlay=document.getElementById('loadingOverlay');
+const titleEl=document.getElementById('loadingTitle');
+const textEl=document.getElementById('loadingText');
+titleEl.textContent=title||'正在加载资源...';
+textEl.textContent=text||'0%';
+overlay.style.display='flex';
+}
+function updateLoadingProgress(percent,text){
+const progressBar=document.getElementById('loadingProgressBar');
+const textEl=document.getElementById('loadingText');
+if(progressBar)progressBar.style.width=percent+'%';
+if(textEl)textEl.textContent=text||percent+'%';
+}
+function hideLoading(){
+document.getElementById('loadingOverlay').style.display='none';
+}
+async function loadModel(key){
+if(loadedModels[key]){
+console.log(`模型 ${key} 已加载，跳过`);
+return loadedModels[key];
+}
+if(loadingModel&&loadingModel.key===key){
+console.log(`模型 ${key} 正在加载中，等待完成...`);
+return loadingModel.promise;
+}
+const model=artifactModels[key];
+if(!model){
+console.warn(`未找到模型配置: ${key}`);
+return null;
+}
+loadingModel={key,promise:null};
+const modelName=model.id||key;
+showLoading('正在搜索字库',`加载 ${modelName}...`);
+loadingModel.promise=new Promise(async(resolve,reject)=>{
+try{
+const assetsContainer=document.getElementById('assetsContainer');
+let assetItem=assetsContainer.querySelector(`#${model.id}`);
+if(!assetItem){
+assetItem=document.createElement('a-asset-item');
+assetItem.setAttribute('id',model.id);
+assetItem.setAttribute('src',model.path);
+assetsContainer.appendChild(assetItem);
+}
+const targetEntity=document.getElementById(`target${key}`);
+if(!targetEntity){
+console.warn(`未找到目标实体: target${key}`);
+reject(new Error(`未找到目标实体: target${key}`));
+return;
+}
+let gltfModel=targetEntity.querySelector('a-gltf-model');
+if(!gltfModel){
+gltfModel=document.createElement('a-gltf-model');
+gltfModel.setAttribute('rotation',model.rotation||'0 0 0');
+gltfModel.setAttribute('position',model.position||'0 -0.25 0');
+gltfModel.setAttribute('scale',model.scale||'1 1 1');
+gltfModel.setAttribute('src',`#${model.id}`);
+if(model.enableAnimation){
+gltfModel.setAttribute('animation-mixer','');
+}
+targetEntity.appendChild(gltfModel);
+}
+updateLoadingProgress(30,'正在下载模型文件...');
+let isResolved=false;
+const finishLoading=()=>{
+if(isResolved)return;
+isResolved=true;
+updateLoadingProgress(100,'加载完成');
+setTimeout(()=>{
+hideLoading();
+loadedModels[key]=model;
+loadingModel=null;
+resolve(model);
+},300);
+};
+const onLoaded=function(){
+finishLoading();
+};
+const onError=function(e){
+if(isResolved)return;
+isResolved=true;
+hideLoading();
+loadingModel=null;
+reject(new Error(`模型加载失败: ${e.detail||'未知错误'}`));
+};
+gltfModel.addEventListener('loaded',onLoaded,{once:true});
+gltfModel.addEventListener('model-loaded',onLoaded,{once:true});
+gltfModel.addEventListener('error',onError,{once:true});
+gltfModel.addEventListener('model-error',onError,{once:true});
+await new Promise(r=>setTimeout(r,100));
+updateLoadingProgress(60,'正在解析模型数据...');
+setTimeout(()=>{
+if(!isResolved&&gltfModel.object3D&&gltfModel.object3D.children.length>0){
+finishLoading();
+}
+},500);
+}catch(error){
+hideLoading();
+loadingModel=null;
+reject(error);
+}
+});
+return loadingModel.promise;
+}
+async function checkCameraPermission(){
+try{
+const stream=await navigator.mediaDevices.getUserMedia({video:true});
+stream.getTracks().forEach(track=>track.stop());
+return true;
+}catch(error){
+console.error('摄像头权限检查失败:',error);
+return false;
+}
+}
+async function requestCameraPermission(){
+try{
+const stream=await navigator.mediaDevices.getUserMedia({video:true});
+stream.getTracks().forEach(track=>track.stop());
+hideError();
+location.reload();
+return true;
+}catch(error){
+console.error('摄像头权限请求失败:',error);
+let errorMsg='无法访问摄像头。';
+if(error.name==='NotAllowedError'){
+errorMsg='摄像头权限被拒绝。请在浏览器设置中允许访问摄像头，然后刷新页面。';
+}else if(error.name==='NotFoundError'){
+errorMsg='未找到摄像头设备。请确保您的设备已连接摄像头。';
+}else if(error.name==='NotReadableError'){
+errorMsg='摄像头被其他应用占用。请关闭其他使用摄像头的应用后重试。';
+}else if(error.message){
+errorMsg=error.message;
+}
+showError('摄像头权限错误',errorMsg,[{text:'重试',callback:requestCameraPermission},{text:'取消',callback:hideError,secondary:true}]);
+return false;
+}
+}
+function checkEnvironment(){
+if(!isHTTPS()){
+showError('需要HTTPS连接','您的网站需要通过HTTPS协议访问才能使用摄像头功能。<br><br><strong>解决方案：</strong><ul><li>使用HTTPS部署您的网站</li><li>如果您是开发环境，可以使用本地服务器（localhost）</li><li>联系网站管理员配置SSL证书</li></ul>',[{text:'我知道了',callback:hideError}]);
+return false;
+}
+return true;
+}
+function combineTitlesFromActiveTargets(){
+const targets=Array.from(activeTargets.values());
+if(targets.length===0)return '';
+if(targets.length===1)return targets[0].title;
+targets.sort((a,b)=>{
+const posA=a.position;
+const posB=b.position;
+if(posA.x!==0||posA.y!==0||posB.x!==0||posB.y!==0){
+if(Math.abs(posA.y-posB.y)>0.05){
+return posB.y-posA.y;
+}
+return posA.x-posB.x;
+}
+return a.targetIndex-b.targetIndex;
+});
+return targets.map(t=>t.title).join('');
+}
+async function showInfo(targetIndex){
+if(!artifactInfo||Object.keys(artifactInfo).length===0){
+await loadConfig();
+}
+const info=artifactInfo[targetIndex];
+if(info){
+if(activeTargets.size>1){
+const combinedTitle=combineTitlesFromActiveTargets();
+document.getElementById('infoTitle').textContent=combinedTitle;
+document.getElementById('infoContent').textContent='语句识别：已识别到多个目标，根据位置组合语句。';
+}else{
+document.getElementById('infoTitle').textContent=info.title;
+document.getElementById('infoContent').innerHTML=info.content;
+}
+infoPanel.classList.add('show');
+const backdrop=document.getElementById('infoPanelBackdrop');
+if(backdrop)backdrop.classList.add('show');
+currentTarget=targetIndex;
+updateImportButtons(targetIndex);
+}else{
+console.warn('未找到索引为',targetIndex,'的文物信息');
+document.getElementById('infoTitle').textContent='文物介绍';
+document.getElementById('infoContent').textContent='未找到该文物的介绍信息，请检查config.json配置。';
+infoPanel.classList.add('show');
+const backdrop2=document.getElementById('infoPanelBackdrop');
+if(backdrop2)backdrop2.classList.add('show');
+currentTarget=null;
+updateImportButtons(null);
+}
+}
+function updateImportButtons(targetIndex){
+const buttonsContainer=document.getElementById('importButtonsContainer');
+const button1=document.getElementById('importButton1');
+const button2=document.getElementById('importButton2');
+let hasButtons=false;
+if(targetIndex!==null&&artifactButtons[targetIndex]){
+const buttons=artifactButtons[targetIndex];
+if(buttons.button1){
+button1.textContent=buttons.button1.text||'按钮1';
+button1.dataset.content=buttons.button1.content||'';
+button1.style.display='block';
+hasButtons=true;
+}else{
+button1.style.display='none';
+}
+if(buttons.button2){
+button2.textContent=buttons.button2.text||'按钮2';
+button2.dataset.content=buttons.button2.content||'';
+button2.style.display='block';
+hasButtons=true;
+}else{
+button2.style.display='none';
+}
+}else{
+button1.style.display='none';
+button2.style.display='none';
+}
+if(hasButtons&&apiConfig.url&&apiConfig.key&&apiConfig.appId){
+buttonsContainer.classList.add('show');
+}else{
+buttonsContainer.classList.remove('show');
+}
+}
+function hideInfo(){
+infoPanel.classList.remove('show');
+const backdrop=document.getElementById('infoPanelBackdrop');
+if(backdrop)backdrop.classList.remove('show');
+document.getElementById('importButtonsContainer').classList.remove('show');
+currentTarget=null;
+}
+function toggleChat(){
+const chatContent=document.getElementById('chatContent');
+const chatToggleBtn=document.getElementById('chatToggleBtn');
+if(chatContent.classList.contains('collapsed')){
+chatContent.classList.remove('collapsed');
+chatToggleBtn.classList.remove('collapsed');
+chatToggleBtn.textContent='▼';
+if(document.getElementById('messagesContainer').children.length===0){
+if(apiConfig.url&&apiConfig.key&&apiConfig.appId){
+addMessage('你好！我是AI智能助手。我可以为您介绍文物的历史、文化背景等信息。','bot');
+}else{
+addMessage('请先在config.json中配置API信息。','bot');
+}
+}
+}else{
+chatContent.classList.add('collapsed');
+chatToggleBtn.classList.add('collapsed');
+chatToggleBtn.textContent='▶';
+}
+}
+document.getElementById('closeInfo').addEventListener('click',hideInfo);
+const backdrop=document.getElementById('infoPanelBackdrop');
+if(backdrop){
+backdrop.addEventListener('click',hideInfo);
+}
+document.getElementById('chatToggleBtn').addEventListener('click',toggleChat);
+document.querySelector('.chat-header').addEventListener('click',toggleChat);
+document.getElementById('importButton1').addEventListener('click',function(){
+const content=this.dataset.content;
+if(content&&content.trim()!==''){
+document.getElementById('userInput').value=content;
+if(!isWaitingForResponse){
+sendMessage();
+}
+}
+});
+document.getElementById('importButton2').addEventListener('click',function(){
+const content=this.dataset.content;
+if(content&&content.trim()!==''){
+document.getElementById('userInput').value=content;
+if(!isWaitingForResponse){
+sendMessage();
+}
+}
+});
+async function loadConfig(){
+try{
+const r=await fetch('config.json?t='+Date.now(),{cache:'no-cache'});
+if(!r.ok)throw new Error('配置文件加载失败');
+const c=await r.json();
+if(c.api){
+apiConfig.url=c.api.url||"";
+apiConfig.key=c.api.key||"";
+apiConfig.appId=c.api.appId||"";
+}
+if(c.mindFile&&c.mindFile.path){
+mindFilePath=c.mindFile.path;
+}
+if(c.mindFile&&c.mindFile.maxTrack){
+maxTrackConfig=c.mindFile.maxTrack;
+}
+if(c.artifacts){
+artifactInfo={};
+artifactModels={};
+artifactButtons={};
+for(const key in c.artifacts){
+const artifact=c.artifacts[key];
+artifactInfo[key]={
+title:artifact.title,
+content:artifact.content
+};
+if(artifact.model){
+artifactModels[key]=artifact.model;
+}
+if(artifact.buttons){
+artifactButtons[key]=artifact.buttons;
+}
+}
+console.log('已加载文物信息:',artifactInfo);
+console.log('已加载模型配置:',artifactModels);
+console.log('已加载按钮配置:',artifactButtons);
+await buildScene();
+}else{
+console.warn('配置文件中未找到artifacts信息');
+}
+}catch(e){console.warn('配置文件加载失败:',e.message);}
+}
+async function buildScene(){
+if(!scene)return;
+try{
+const hasPermission=await checkCameraPermission();
+if(!hasPermission){
+showError('需要摄像头权限','AR功能需要摄像头权限才能正常工作。请先允许访问摄像头。',[{text:'请求权限',callback:async function(){
+const granted=await requestCameraPermission();
+if(granted){
+await buildScene();
+}
+}},{text:'取消',callback:hideError,secondary:true}]);
+return;
+}
+await new Promise((resolve)=>{
+if(scene.hasLoaded){
+resolve();
+}else{
+scene.addEventListener('loaded',resolve,{once:true});
+}
+});
+if(!mindFilePath){
+console.warn('Mind文件路径未配置');
+return;
+}
+const mindarAttr=`imageTargetSrc:${mindFilePath}; maxTrack: ${maxTrackConfig};`;
+if(mindarInitialized){
+console.log('更新mindar-image属性');
+scene.setAttribute('mindar-image',mindarAttr);
+setTimeout(()=>{
+const mindarSystem=scene.systems['mindar-image-system'];
+if(mindarSystem){
+try{
+mindarSystem.stop();
+mindarSystem.start();
+console.log('重新启动AR系统');
+}catch(e){
+console.warn('重新启动AR系统失败:',e);
+}
+}
+},100);
+}else{
+scene.setAttribute('mindar-image',mindarAttr);
+mindarInitialized=true;
+console.log('已设置mindar-image属性，路径:',mindFilePath);
+}
+const assetsContainer=document.getElementById('assetsContainer');
+const sceneEntities=scene.querySelectorAll('[mindar-image-target]');
+sceneEntities.forEach(el=>el.remove());
+assetsContainer.innerHTML='';
+loadedModels={};
+for(const key in artifactModels){
+const model=artifactModels[key];
+const targetEntity=document.createElement('a-entity');
+targetEntity.setAttribute('mindar-image-target',`targetIndex: ${model.targetIndex}`);
+targetEntity.setAttribute('id',`target${key}`);
+targetEntity.style.display='none';
+scene.appendChild(targetEntity);
+setTimeout(function(){
+const targetEl=document.getElementById(`target${key}`);
+if(targetEl){
+targetEl.addEventListener('targetFound',async function(event){
+const modelKey=key;
+const info=artifactInfo[modelKey];
+if(info){
+activeTargets.set(modelKey,{
+title:info.title,
+position:{x:0,y:0,z:0},
+key:modelKey,
+targetIndex:artifactModels[modelKey]?.targetIndex||0
+});
+}
+try{
+await loadModel(modelKey);
+const entity=document.getElementById(`target${modelKey}`);
+if(entity){
+entity.style.display='block';
+const updatePosition=()=>{
+if(entity.object3D&&window.THREE){
+try{
+const pos=new THREE.Vector3();
+entity.object3D.getWorldPosition(pos);
+activeTargets.set(modelKey,{
+title:artifactInfo[modelKey]?artifactInfo[modelKey].title:'',
+position:{x:pos.x,y:pos.y,z:pos.z},
+key:modelKey,
+targetIndex:artifactModels[modelKey]?.targetIndex||0
+});
+}catch(e){
+}
+}
+};
+updatePosition();
+const positionInterval=setInterval(()=>{
+if(activeTargets.has(modelKey)){
+updatePosition();
+}else{
+clearInterval(positionInterval);
+}
+},200);
+setTimeout(()=>clearInterval(positionInterval),3000);
+}
+showInfo(modelKey);
+}catch(error){
+console.error(`加载模型失败 (${modelKey}):`,error);
+showInfo(modelKey);
+}
+});
+targetEl.addEventListener('targetLost',function(){
+const entity=document.getElementById(`target${key}`);
+if(entity){
+entity.style.display='none';
+}
+activeTargets.delete(key);
+if(activeTargets.size===0){
+hideInfo();
+}else{
+const remainingTargets=Array.from(activeTargets.keys());
+if(remainingTargets.length>0){
+showInfo(remainingTargets[0]);
+}
+}
+});
+}
+},100);
+}
+let arReadyHandler=null;
+let arErrorHandler=null;
+arReadyHandler=function(){
+console.log('AR场景已就绪');
+hideError();
+hideLoading();
+if(arReadyHandler)scene.removeEventListener('arReady',arReadyHandler);
+if(arErrorHandler)scene.removeEventListener('arError',arErrorHandler);
+};
+arErrorHandler=function(event){
+console.error('AR错误:',event.detail);
+let errorMsg='AR初始化失败。';
+if(event.detail){
+if(event.detail.includes('camera')||event.detail.includes('摄像头')||event.detail.includes('permission')||event.detail.includes('getUserMedia')){
+errorMsg='无法访问摄像头。请检查摄像头权限和浏览器设置。';
+showError('摄像头访问失败',errorMsg+'<br><br><strong>可能的原因：</strong><ul><li>浏览器未授予摄像头权限</li><li>摄像头被其他应用占用</li><li>浏览器不支持WebRTC</li><li>需要HTTPS连接</li></ul>',[{text:'请求权限',callback:async function(){
+const granted=await requestCameraPermission();
+if(granted){
+location.reload();
+}
+}},{text:'取消',callback:hideError,secondary:true}]);
+if(arReadyHandler)scene.removeEventListener('arReady',arReadyHandler);
+if(arErrorHandler)scene.removeEventListener('arError',arErrorHandler);
+return;
+}
+errorMsg=event.detail;
+}
+showError('AR初始化错误',errorMsg,[{text:'重试',callback:function(){location.reload();}},{text:'取消',callback:hideError,secondary:true}]);
+if(arReadyHandler)scene.removeEventListener('arReady',arReadyHandler);
+if(arErrorHandler)scene.removeEventListener('arError',arErrorHandler);
+};
+scene.addEventListener('arReady',arReadyHandler);
+scene.addEventListener('arError',arErrorHandler);
+showLoading('初始化AR系统','正在启动摄像头...');
+updateLoadingProgress(80,'准备就绪');
+setTimeout(()=>{
+const mindarSystem=scene.systems['mindar-image-system'];
+if(mindarSystem){
+try{
+mindarSystem.start();
+console.log('手动启动AR系统');
+updateLoadingProgress(100,'AR系统已启动');
+setTimeout(()=>{
+hideLoading();
+},500);
+}catch(e){
+console.warn('手动启动AR系统失败:',e);
+hideLoading();
+}
+}
+},500);
+console.log('场景构建完成');
+}catch(error){
+console.error('场景构建错误:',error);
+showError('场景构建失败',`构建AR场景时发生错误：${error.message}`,[{text:'刷新页面',callback:function(){location.reload();}},{text:'取消',callback:hideError,secondary:true}]);
+}
+}
+function setupEventListeners(){
+const sb=document.getElementById('sendButton'),ui=document.getElementById('userInput');
+sb.addEventListener('click',sendMessage);
+ui.addEventListener('keypress',function(e){if(e.key==='Enter'&&!isWaitingForResponse)sendMessage();});
+}
+async function sendMessage(){
+const m=document.getElementById('userInput').value.trim();
+if(!m)return;
+if(!apiConfig.url||!apiConfig.key||!apiConfig.appId){
+addMessage('请先在config.json中配置API信息。','bot');
+return;
+}
+disableInput();
+addMessage(m,'user');
+document.getElementById('userInput').value='';
+document.getElementById('typingIndicator').classList.add('show');
+await callAPI(m);
+}
+async function callAPI(message){
+try{
+const c=new AbortController(),t=setTimeout(()=>c.abort(),60000);
+const r=await fetch(apiConfig.url,{method:'POST',headers:{'Authorization':`Bearer ${apiConfig.key}`,'Content-Type':'application/json'},body:JSON.stringify({input:{prompt:message},parameters:{temperature:0.7,max_tokens:2000}}),signal:c.signal});
+clearTimeout(t);
+if(!r.ok)throw new Error(`API错误: ${r.status} ${r.statusText}`);
+const result=await r.json();
+document.getElementById('typingIndicator').classList.remove('show');
+let answer="抱歉，无法解析API响应";
+if(result.output&&result.output.text)answer=result.output.text;
+else if(result.choices&&result.choices[0]&&result.choices[0].message)answer=result.choices[0].message.content;
+else if(result.response)answer=result.response;
+if(!answer||answer.trim()==='')answer="抱歉，AI没有返回有效回复，请重试。";
+await typeMessage(answer,'bot');
+}catch(error){
+document.getElementById('typingIndicator').classList.remove('show');
+let em='发生未知错误';
+if(error.name==='AbortError')em='请求超时，请检查网络连接或稍后重试';
+else if(error.message)em=error.message;
+addMessage(`抱歉，${em}`,'bot');
+console.error('API调用错误:',error);
+}finally{enableInput();}
+}
+function addMessage(text,sender){
+const e=document.createElement('div');
+e.classList.add('message',sender==='user'?'user-message':'bot-message');
+e.textContent=text;
+document.getElementById('messagesContainer').appendChild(e);
+const c=document.getElementById('messagesContainer');
+c.scrollTop=c.scrollHeight;
+}
+function typeMessage(text,sender){
+return new Promise(resolve=>{
+const e=document.createElement('div');
+e.classList.add('message',sender==='user'?'user-message':'bot-message');
+document.getElementById('messagesContainer').appendChild(e);
+let i=0;
+const id=setInterval(()=>{
+if(i<text.length){e.textContent+=text.charAt(i);i++;const c=document.getElementById('messagesContainer');c.scrollTop=c.scrollHeight;}
+else{clearInterval(id);resolve();}
+},50);
+});
+}
+function disableInput(){document.getElementById('userInput').disabled=true;document.getElementById('sendButton').disabled=true;isWaitingForResponse=true;}
+function enableInput(){document.getElementById('userInput').disabled=false;document.getElementById('sendButton').disabled=false;isWaitingForResponse=false;document.getElementById('userInput').focus();}
+window.addEventListener('error',function(event){
+if(event.message&&(event.message.includes('getUserMedia')||event.message.includes('camera')||event.message.includes('摄像头')||event.message.includes('permission'))){
+console.error('捕获到摄像头相关错误:',event.message);
+if(document.getElementById('errorOverlay').style.display==='none'){
+showError('摄像头错误','检测到摄像头访问错误。请检查浏览器权限设置。',[{text:'请求权限',callback:requestCameraPermission},{text:'取消',callback:hideError,secondary:true}]);
+}
+}
+});
+window.addEventListener('unhandledrejection',function(event){
+if(event.reason&&(event.reason.name==='NotAllowedError'||event.reason.name==='NotFoundError'||event.reason.name==='NotReadableError'||event.reason.message&&(event.reason.message.includes('camera')||event.reason.message.includes('摄像头')))){
+console.error('捕获到未处理的摄像头错误:',event.reason);
+event.preventDefault();
+if(document.getElementById('errorOverlay').style.display==='none'){
+let errorMsg='无法访问摄像头。';
+if(event.reason.name==='NotAllowedError'){
+errorMsg='摄像头权限被拒绝。请在浏览器设置中允许访问摄像头。';
+}else if(event.reason.name==='NotFoundError'){
+errorMsg='未找到摄像头设备。';
+}else if(event.reason.name==='NotReadableError'){
+errorMsg='摄像头被其他应用占用。';
+}
+showError('摄像头访问失败',errorMsg+'<br><br>请刷新页面并授予摄像头权限后重试。',[{text:'请求权限',callback:requestCameraPermission},{text:'刷新页面',callback:function(){location.reload();}},{text:'取消',callback:hideError,secondary:true}]);
+}
+}
+});
+document.addEventListener('DOMContentLoaded',async function(){
+if(!checkEnvironment()){
+return;
+}
+if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+showError('浏览器不支持','您的浏览器不支持摄像头访问功能。请使用最新版本的Chrome、Firefox、Safari或Edge浏览器。',[{text:'我知道了',callback:hideError}]);
+return;
+}
+const hasPermission=await checkCameraPermission();
+if(!hasPermission){
+showError('需要摄像头权限','AR功能需要摄像头权限才能正常工作。请先允许访问摄像头。',[{text:'请求权限',callback:async function(){
+const granted=await requestCameraPermission();
+if(granted){
+await loadConfig();
+setupEventListeners();
+}
+}},{text:'取消',callback:hideError,secondary:true}]);
+return;
+}
+await loadConfig();
+setupEventListeners();
+});
+</script>
+</body>
+</html>
